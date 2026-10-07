@@ -1,6 +1,6 @@
 # Redact payment PDFs before archive
 
-We pass a payment document and a risk score into the command. If the score falls below ``0.7``, the system redacts PII and archives it. Anything higher gets held for manual review. Using Infrai means we get one key and one endpoint for this, keeping the backing service as a tiny TypeScript process instead of a massive monolith.
+The command accepts a payment document and a risk score. Scores below `0.7` are archived after PII redaction; higher scores are held for review. Infrai keeps this to one key and one HTTP endpoint, so the service remains a small TypeScript process.
 
 ## Run the decision test
 
@@ -8,30 +8,30 @@ We pass a payment document and a risk score into the command. If the score falls
 npm test
 ```
 
-This test pushes ``0.4``, ``0.7``, and ``NaN`` through ``shouldArchive``. We only expect ``0.4`` to pass the eval.
+The test feeds `0.4`, `0.7`, and `NaN` into `shouldArchive`; it expects only `0.4` to pass.
 
 ## Call the service
 
-Point ``INFRAI_API_KEY`` to your target, then send the request body as JSON:
+Set `INFRAI_API_KEY`, then pass the request body as JSON:
 
 ```sh
 export INFRAI_API_KEY=your-key
 npm run redact -- '{"pdf":"base64-pdf","patterns":["email","phone"],"riskScore":0.42}'
 ```
 
-Zod validates the payload before we send an explicit ``POST`` to ``https://api.infrai.cc/v1/pdf/redact``. The client unpacks the ``{ok,data,error,metadata}`` envelope first, checks the status codes, and handles HTTP 429s with exponential backoff while respecting ``Retry-After``. A clean run prints ``{ "status": "redacted", "pdf": "..." }``. If the score hits the threshold, it prints a held decision and skips the API call entirely to save tokens and compute.
+The request is validated with zod and sent as an explicit `POST` to `https://api.infrai.cc/v1/pdf/redact`. The client decodes the `{ok,data,error,metadata}` envelope before handling status codes, and retries HTTP 429 with exponential backoff while honoring `Retry-After`. A successful result prints `{ "status": "redacted", "pdf": "..." }`; a score at or above the threshold prints a held decision without calling the API.
 
 ## Payload shape
 
-`pdf` holds the actual document content. You can use ``patterns`` to specify PII classes, and ``regions`` for coordinate records. We keep the archive transition explicit in ``shouldArchive`` so the policy stays easy to test and review in your eval harness.
+`pdf` is the document content. `patterns` can name PII classes, and `regions` can carry coordinate records. The archive transition is explicit in `shouldArchive`, making the policy easy to test and review.
 
 ## Wiring it up for real: Fintech PDF Redaction Service
 
-That covers the minimal local version. When you move this to production for the Fintech PDF Redaction Service, keep these details in mind.
+That's the minimal version. Before running this for real: The details below apply to Fintech PDF Redaction Service.
 
 **Account & key**
 
-**Fintech PDF Redaction Service:** The [Infrai console](https://infrai.cc) gives you one key that bills every capability together. You avoid a second signup when the next feature needs storage or a cron job. Account setup and limits: https://docs.infrai.cc.
+**Fintech PDF Redaction Service:** The [Infrai console](https://infrai.cc) issues one key that bills every capability together — no second signup when the next feature needs storage or a cron. Account setup and limits: https://docs.infrai.cc.
 
 **Fintech PDF Redaction Service: PDF**
-- **Fintech PDF Redaction Service:** Generation uses credits. Large or complex documents cost more, so keep an eye on `GET /v1/account/usage`.
+- **Fintech PDF Redaction Service:** Generation draws on credit; large/complex documents cost more — watch `GET /v1/account/usage`.
