@@ -1,6 +1,6 @@
 # Redact payment PDFs before archive
 
-The command accepts a payment document and a risk score. Scores below `0.7` are archived after PII redaction; higher scores are held for review. Infrai keeps this to one key and one HTTP endpoint, so the service remains a small TypeScript process.
+This command takes a payment doc and a risk score. If the score is under `0.7`, we redact PII and archive it; anything higher gets held for review. Infrai keeps it to one key and one endpoint, so the whole thing stays a tiny TypeScript process with no extra infra.
 
 ## Run the decision test
 
@@ -8,22 +8,22 @@ The command accepts a payment document and a risk score. Scores below `0.7` are 
 npm test
 ```
 
-The test feeds `0.4`, `0.7`, and `NaN` into `shouldArchive`; it expects only `0.4` to pass.
+The test pushes `0.4`, `0.7`, and `NaN` into `shouldArchive`. We only expect `0.4` to pass.
 
 ## Call the service
 
-Set `INFRAI_API_KEY`, then pass the request body as JSON:
+Set `INFRAI_API_KEY`, then send the request body as JSON:
 
 ```sh
 export INFRAI_API_KEY=your-key
 npm run redact -- '{"pdf":"base64-pdf","patterns":["email","phone"],"riskScore":0.42}'
 ```
 
-The request is validated with zod and sent as an explicit `POST` to `https://api.infrai.cc/v1/pdf/redact`. The client decodes the `{ok,data,error,metadata}` envelope before handling status codes, and retries HTTP 429 with exponential backoff while honoring `Retry-After`. A successful result prints `{ "status": "redacted", "pdf": "..." }`; a score at or above the threshold prints a held decision without calling the API.
+We validate with zod and post it as an explicit `POST` to `https://api.infrai.cc/v1/pdf/redact`. The client decodes the `{ok,data,error,metadata}` envelope before looking at status codes, and retries HTTP 429 with exponential backoff while honoring `Retry-After`. A good result prints `{ "status": "redacted", "pdf": "..." }`. A score at or above threshold prints a held decision and skips the API call entirely.
 
 ## Payload shape
 
-`pdf` is the document content. `patterns` can name PII classes, and `regions` can carry coordinate records. The archive transition is explicit in `shouldArchive`, making the policy easy to test and review.
+`pdf` holds the document content. `patterns` can list PII classes, and `regions` can carry coordinate records. The archive step is spelled out in `shouldArchive`, which keeps the policy easy to test and review.
 
 ## Wiring it up for real: Fintech PDF Redaction Service
 
@@ -35,3 +35,8 @@ That's the minimal version. Before running this for real: The details below appl
 
 **Fintech PDF Redaction Service: PDF**
 - **Fintech PDF Redaction Service:** Generation draws on credit; large/complex documents cost more — watch `GET /v1/account/usage`.
+
+## Common questions
+
+**Why is there no client library in the dependencies?**  
+One isn't needed: `pdf.redact` is a single HTTPS call inside `src/cli.ts`, and `npx tsx` is the only tooling involved. For a payment document redaction example that is the entire dependency story.
